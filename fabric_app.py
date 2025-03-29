@@ -10,25 +10,39 @@ st.set_page_config(page_title="Fabric Order Processor", layout="wide")
 components.html(
     """
     <style>
-    .follow-item {
+    .cat {
         position: fixed;
+        bottom: 60px;
+        left: -120px;
         width: 80px;
-        z-index: 9999;
-        transition: all 0.2s ease;
+        z-index: 1000;
+        animation: moveCat 10s linear infinite;
         pointer-events: none;
     }
-    #cat {
-        bottom: 80px;
-        left: 50px;
-    }
-    #ball {
+
+    .ball {
+        position: fixed;
         bottom: 20px;
-        left: 100px;
+        left: -60px;
         width: 40px;
+        z-index: 999;
+        animation: moveBall 10s linear infinite;
+        pointer-events: none;
+    }
+
+    @keyframes moveCat {
+        0% { left: -120px; }
+        100% { left: 110%; }
+    }
+
+    @keyframes moveBall {
+        0% { left: -60px; transform: rotate(0deg); }
+        100% { left: 105%; transform: rotate(1080deg); }
     }
     </style>
-    <img id="cat" class="follow-item" src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif">
-    <img id="ball" class="follow-item" src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Basketball.png/50px-Basketball.png">
+
+    <img class="cat" src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif" />
+    <img class="ball" src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Basketball.png/50px-Basketball.png" />
     """,
     height=0,
 )
