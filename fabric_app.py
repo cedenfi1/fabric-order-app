@@ -121,8 +121,6 @@ if uploaded_file:
     if all(col in data.columns for col in ['Customer Name', 'Sku', 'Brand', 'Product Name']):
         grouped = data.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
         combined_data = grouped.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
-        st.markdown("**Preview of Merged Orders:**")
-        st.dataframe(combined_data.head(), use_container_width=True)
     else:
         st.warning("Missing required columns to combine data.")
 
@@ -151,3 +149,4 @@ if uploaded_file:
         file_name="processed_order_summary.csv",
         mime="text/csv",
     )
+
