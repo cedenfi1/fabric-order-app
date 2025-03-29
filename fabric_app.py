@@ -1,166 +1,89 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-import streamlit.components.v1 as components
 
-# Page configuration
+# Configure the Streamlit app layout and title
 st.set_page_config(page_title="Fabric Order Processor", layout="wide")
+st.title("🧵 Fabric Order Processor")
 
-# --- Persistent Animated Cat and Ball ---
-components.html(
-    """
-    <style>
-    .cat {
-        position: fixed;
-        bottom: 60px;
-        left: -120px;
-        width: 80px;
-        z-index: 1000;
-        animation: moveCat 10s linear infinite;
-        pointer-events: none;
-    }
-    .ball {
-        position: fixed;
-        bottom: 20px;
-        left: -60px;
-        width: 40px;
-        z-index: 999;
-        animation: moveBall 10s linear infinite;
-        pointer-events: none;
-    }
-    @keyframes moveCat {
-        0% { left: -120px; }
-        100% { left: 110%; }
-    }
-    @keyframes moveBall {
-        0% { left: -60px; transform: rotate(0deg); }
-        100% { left: 105%; transform: rotate(1080deg); }
-    }
-    </style>
-    <img class="cat" src="https://media.giphy.com/media/JIX9t2j0ZTN9S/giphy.gif" />
-    <img class="ball" src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/09/Basketball.png/50px-Basketball.png" />
-    """,
-    height=0,
-)
+# Allow user to upload a CSV file
+uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
 
-# --- Global CSS for Box Style ---
-st.markdown("""
-<style>
-    .popup-box {
-        background-color: #ffffffcc;
-        border-radius: 1rem;
-        padding: 2.5rem 3rem;
-        max-width: 850px;
-        margin: 2rem auto;
-        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
-    }
-    .main-header {
-        text-align: center;
-        margin-bottom: 2rem;
-    }
-    .main-header h1 {
-        font-size: 2.5rem;
-        color: #222;
-        margin-bottom: 0.5rem;
-    }
-    .main-header p {
-        color: #666;
-        font-size: 1.1rem;
-        margin-top: 0;
-    }
-    hr {
-        border: none;
-        border-top: 1px solid #eee;
-        margin: 2rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
+# Process the uploaded file if it exists
+if uploaded_file:
+    # Read the uploaded CSV file
+    data = pd.read_csv(uploaded_file, low_memory=False, encoding='utf-8')
 
-# --- MAIN APP BOX CONTAINER ---
-with st.container():
-    st.markdown('<div class="popup-box">', unsafe_allow_html=True)
+    # Select only relevant columns for processing
+    key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
+    existing_columns = [col for col in key_columns if col in data.columns]
+    data = data[existing_columns]
 
-    # --- Title ---
-    st.markdown("""
-    <div class="main-header">
-        <h1>🧵 Fabric Order Processor</h1>
-        <p>Turn messy CSVs into clean fabric cut summaries</p>
-    </div>
-    <hr>
-    """, unsafe_allow_html=True)
+    # Ensure 'Order #' column is numeric for filtering
+    if 'Order #' in data.columns:
+        data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
 
-    # --- File Upload Section ---
-    st.subheader("Step 1: Upload Your CSV File")
-    uploaded_file = st.file_uploader("Select a fabric orders CSV file", type="csv")
+    # Display original order number range if possible
+    if 'Order #' in data.columns:
+        original_min_order = data['Order #'].min()
+        original_max_order = data['Order #'].max()
+        st.write("Original Order Number Range:")
+        st.write(f"Min Order #: {original_min_order}")
+        st.write(f"Max Order #: {original_max_order}")
+    else:
+        st.warning("Order # column not found. Cannot calculate original order range.")
 
-    if uploaded_file:
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("Step 2: Processed Summary")
+    # Clean and filter 'Brand' column to include only valid product types
+    if 'Brand' in data.columns:
+        data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
+        data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
+        st.write(f"Rows after filtering by Brand (FABRIC, BUNDLE, KIT): {len(data)}")
+    else:
+        st.warning("Brand column not found. Skipping brand filter.")
 
-        # Load and preprocess CSV
-        data = pd.read_csv(uploaded_file, low_memory=False, encoding='utf-8')
-        key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
-        data = data[[col for col in key_columns if col in data.columns]]
+    # Display filtered order number range if applicable
+    if 'Order #' in data.columns and not data.empty:
+        filtered_min_order = data['Order #'].min()
+        filtered_max_order = data['Order #'].max()
+        st.write("Filtered Order Number Range:")
+        st.write(f"Min Order #: {filtered_min_order}")
+        st.write(f"Max Order #: {filtered_max_order}")
 
-        # Ensure 'Order #' is numeric
-        if 'Order #' in data.columns:
-            data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
+    # Combine duplicate orders by customer and SKU, summing quantities
+    if all(col in data.columns for col in ['Customer Name', 'Sku', 'Brand', 'Product Name']):
+        grouped = data.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
+        combined_data = grouped.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
+        st.write("Combined duplicate orders with summed quantities:")
+        st.dataframe(combined_data.head())
+    else:
+        st.warning("Cannot combine data: Required columns are missing.")
 
-        # Show original order number range
-        if 'Order #' in data.columns:
-            st.markdown("**Original Order Number Range:**")
-            st.write(f"Min Order #: `{int(data['Order #'].min())}`")
-            st.write(f"Max Order #: `{int(data['Order #'].max())}`")
-        else:
-            st.warning("'Order #' column not found.")
+    # Create a tally of how many cuts of each quantity are needed per SKU
+    cut_tally = combined_data.groupby(['Sku', 'Brand', 'Product Name', 'Quantity']).size().reset_index(name='Count')
 
-        # Filter by Brand
-        if 'Brand' in data.columns:
-            data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
-            data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
-            st.markdown("**Filtered Rows by Brand:**")
-            st.write(f"Remaining Rows: `{len(data)}`")
-        else:
-            st.warning("'Brand' column not found.")
+    # Pivot the table so each row is a SKU and columns show counts of each quantity
+    pivot_table = cut_tally.pivot_table(index=['Sku', 'Brand', 'Product Name'],
+                                        columns='Quantity',
+                                        values='Count',
+                                        fill_value=0).reset_index()
 
-        # Show filtered order number range
-        if 'Order #' in data.columns and not data.empty:
-            st.markdown("**Filtered Order Number Range:**")
-            st.write(f"Min Order #: `{int(data['Order #'].min())}`")
-            st.write(f"Max Order #: `{int(data['Order #'].max())}`")
+    # Format column headers (e.g., "1 QTY", "2 QTY", etc.)
+    pivot_table.columns.name = None
+    pivot_table.columns = [f"{int(col)} QTY" if isinstance(col, (int, float)) else col for col in pivot_table.columns]
 
-        # Combine duplicates
-        if all(col in data.columns for col in ['Customer Name', 'Sku', 'Brand', 'Product Name']):
-            grouped = data.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
-            combined_data = grouped.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
-        else:
-            st.warning("Missing required columns to combine data.")
+    # Convert the final pivot table to CSV format in memory
+    output = BytesIO()
+    pivot_table.to_csv(output, index=False)
 
-        # Tally cut counts by SKU and Quantity
-        cut_tally = combined_data.groupby(['Sku', 'Brand', 'Product Name', 'Quantity']).size().reset_index(name='Count')
-        pivot_table = cut_tally.pivot_table(index=['Sku', 'Brand', 'Product Name'],
-                                            columns='Quantity',
-                                            values='Count',
-                                            fill_value=0).reset_index()
+    # Show success message and provide download link
+    st.success("✅ File processed successfully!")
 
-        pivot_table.columns.name = None
-        pivot_table.columns = [f"{int(col)} QTY" if isinstance(col, (int, float)) else col for col in pivot_table.columns]
-
-        # Convert to downloadable CSV
-        output = BytesIO()
-        pivot_table.to_csv(output, index=False)
-
-        # --- Download Section ---
-        st.markdown("<hr>", unsafe_allow_html=True)
-        st.subheader("Step 3: Download Your Summary")
-        st.success("✅ File processed successfully! Ready for download.")
-
+    with st.container():
+        st.markdown("---")
+        st.subheader("📥 Your processed file is ready:")
         st.download_button(
-            label="📥 Download Processed CSV",
+            label="Download Processed CSV File",
             data=output.getvalue(),
             file_name="processed_order_summary.csv",
-            mime="text/csv",
+            mime="text/csv"
         )
-
-    # CLOSE STYLED BOX
-    st.markdown('</div>', unsafe_allow_html=True)
