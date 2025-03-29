@@ -47,6 +47,21 @@ components.html(
     height=0,
 )
 
+# --- App Box Styling ---
+st.markdown("""
+<style>
+.app-box {
+    background: #ffffffcc;
+    max-width: 850px;
+    margin: auto;
+    padding: 2rem 3rem;
+    border-radius: 1rem;
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+}
+</style>
+<div class="app-box">
+""", unsafe_allow_html=True)
+
 # --- Title Section ---
 st.markdown("""
 <style>
@@ -149,4 +164,7 @@ if uploaded_file:
         file_name="processed_order_summary.csv",
         mime="text/csv",
     )
+
+# Close .app-box wrapper
+st.markdown("</div>", unsafe_allow_html=True)
 
