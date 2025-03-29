@@ -52,11 +52,14 @@ st.markdown("""
 <style>
 .app-box {
     background: #ffffffcc;
-    max-width: 850px;
-    margin: auto;
-    padding: 2rem 3rem;
+    width: 90%;
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 3rem;
     border-radius: 1rem;
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 15px 30px rgba(0, 0, 0, 0.15);
+    position: relative;
+    z-index: 1;
 }
 </style>
 <div class="app-box">
@@ -165,6 +168,5 @@ if uploaded_file:
         mime="text/csv",
     )
 
-# --- Always close the box ---
+# --- Close the pop-up box no matter what ---
 st.markdown("</div>", unsafe_allow_html=True)
-
