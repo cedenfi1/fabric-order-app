@@ -165,6 +165,6 @@ if uploaded_file:
         mime="text/csv",
     )
 
-# Close .app-box wrapper
+# --- Always close the box ---
 st.markdown("</div>", unsafe_allow_html=True)
 
