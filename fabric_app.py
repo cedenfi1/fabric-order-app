@@ -20,11 +20,9 @@ if uploaded_file:
         data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
         original_min_order = int(data['Order #'].min())
         original_max_order = int(data['Order #'].max())
-        order_range_string = f"Original Order Range: {original_min_order} to {original_max_order}"
+        order_range_col_name = f"Order Range: {original_min_order} to {original_max_order}"
     else:
-        original_min_order = None
-        original_max_order = None
-        order_range_string = ""
+        order_range_col_name = "Order Range"
 
     # Filter valid brands
     if 'Brand' in data.columns:
@@ -90,16 +88,12 @@ if uploaded_file:
 
     pivot_table['Total Yardage'] = pivot_table.apply(get_total_yards, axis=1)
 
-    # Final column order with Order Range inserted after last QTY
+    # Final column order with yardage inserted after Product Name
     final_columns = ['Brand', 'Sku', 'Product Name', 'Total Yardage'] + quantity_cols
     pivot_table = pivot_table[final_columns]
 
-    # Insert "Order Range" column to far right
-    pivot_table.insert(len(pivot_table.columns), "Order Range", "")
-
-    # Fill only the first row with the range string
-    if order_range_string:
-        pivot_table.at[0, "Order Range"] = order_range_string
+    # Add the Order Range column header at the end
+    pivot_table[order_range_col_name] = ""
 
     # Convert to CSV
     output = BytesIO()
