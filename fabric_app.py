@@ -20,9 +20,11 @@ if uploaded_file:
         data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
         original_min_order = int(data['Order #'].min())
         original_max_order = int(data['Order #'].max())
+        order_range_string = f"Original Order Range: {original_min_order} to {original_max_order}"
     else:
         original_min_order = None
         original_max_order = None
+        order_range_string = ""
 
     # Filter valid brands
     if 'Brand' in data.columns:
@@ -73,7 +75,7 @@ if uploaded_file:
             renamed_columns.append(col)
     pivot_table.columns = renamed_columns
 
-    # Reorder columns: Brand, Sku, Product Name, Total Yardage, QTY Columns
+    # Reorder columns: Brand, Sku, Product Name, Total Yardage, QTYs
     quantity_cols = [col for col in pivot_table.columns if "QTY" in col]
     pivot_table = pivot_table[['Brand', 'Sku', 'Product Name'] + quantity_cols]
 
@@ -88,25 +90,22 @@ if uploaded_file:
 
     pivot_table['Total Yardage'] = pivot_table.apply(get_total_yards, axis=1)
 
-    # Reorder again to insert 'Total Yardage' after Product Name
-    reordered = ['Brand', 'Sku', 'Product Name', 'Total Yardage'] + quantity_cols
-    pivot_table = pivot_table[reordered]
+    # Final column order with Order Range inserted after last QTY
+    final_columns = ['Brand', 'Sku', 'Product Name', 'Total Yardage'] + quantity_cols
+    pivot_table = pivot_table[final_columns]
 
-    # Add header row with order range
-    if original_min_order is not None and original_max_order is not None:
-        header_row = pd.DataFrame(
-            [["Original Order Range:", f"{original_min_order} to {original_max_order}"] + [""] * (len(pivot_table.columns) - 2)],
-            columns=pivot_table.columns
-        )
-        final_output = pd.concat([header_row, pivot_table], ignore_index=True)
-    else:
-        final_output = pivot_table
+    # Insert "Order Range" column to far right
+    pivot_table.insert(len(pivot_table.columns), "Order Range", "")
 
-    # Convert to CSV for download
+    # Fill only the first row with the range string
+    if order_range_string:
+        pivot_table.at[0, "Order Range"] = order_range_string
+
+    # Convert to CSV
     output = BytesIO()
-    final_output.to_csv(output, index=False)
+    pivot_table.to_csv(output, index=False)
 
-    # Download UI
+    # --- Download Section ---
     st.success("✅ File processed successfully!")
     st.markdown("---")
     st.subheader("📥 Download Your Processed File")
