@@ -1,131 +1,141 @@
-import pandas as pd
-import streamlit as st
-from io import BytesIO
-from openpyxl import Workbook
-from openpyxl.utils.dataframe import dataframe_to_rows
-from openpyxl.styles import Font, Alignment
+# Reload the newly uploaded file for processing
+data = pd.read_csv("/mnt/data/report-type11-2025-03-31.csv", low_memory=False)
 
-# Configure Streamlit
-st.set_page_config(page_title="Fabric Order Processor", layout="wide")
-st.title("🧵 Fabric Order Processor")
+# Key columns
+key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
+data = data[[col for col in key_columns if col in data.columns]]
 
-uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
+# Clean up columns
+data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
+original_min_order = int(data['Order #'].min())
+original_max_order = int(data['Order #'].max())
+order_range_col_name = f"Order Range: {original_min_order} to {original_max_order}"
 
-if uploaded_file:
-    data = pd.read_csv(uploaded_file, low_memory=False, encoding='utf-8')
+# Standardize Brand
+data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
+data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
 
-    key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
-    data = data[[col for col in key_columns if col in data.columns]]
+# Separate by brand
+kits = data[data['Brand'] == 'KIT']
+fabrics = data[data['Brand'] == 'FABRIC']
+bundles = data[data['Brand'] == 'BUNDLE']
 
-    if 'Order #' in data.columns:
-        data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
-        original_min_order = int(data['Order #'].min())
-        original_max_order = int(data['Order #'].max())
-        order_range_col_name = f"Order Range: {original_min_order} to {original_max_order}"
-    else:
-        order_range_col_name = "Order Range"
+# Grouping
+kits_grouped = kits.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color'], as_index=False)['Quantity'].sum()
+kits_grouped = kits_grouped[['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']]
 
-    if 'Brand' in data.columns:
-        data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
-        data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
+fabrics_grouped = fabrics.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
+fabrics_grouped['Color'] = ""
 
-    kits = data[data['Brand'] == 'KIT']
-    non_kits = data[data['Brand'].isin(['FABRIC', 'BUNDLE'])]
+bundles_grouped = bundles.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
+bundles_grouped['Color'] = ""
 
-    if not non_kits.empty:
-        non_kits_grouped = non_kits.groupby(
-            ['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False
-        )['Quantity'].sum()
-        non_kits_grouped['Color'] = ""
-    else:
-        non_kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Quantity', 'Color'])
+# Combine fabric + kits
+main_combined = pd.concat([fabrics_grouped, kits_grouped], ignore_index=True)
+main_combined = main_combined.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
 
-    if not kits.empty:
-        kits_grouped = kits.groupby(
-            ['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color'], as_index=False
-        )['Quantity'].sum()
-    else:
-        kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity'])
+# Bundle handled separately
+bundles_combined = bundles_grouped.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
 
-    # Combine everything
-    combined_data = pd.concat([non_kits_grouped, kits_grouped], ignore_index=True)
-    combined_data = combined_data.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
+# Build cut tallies for both
+main_tally = main_combined.groupby(['Sku', 'Brand', 'Product Name', 'Color', 'Quantity']).size().reset_index(name='Count')
+bundle_tally = bundles_combined.groupby(['Sku', 'Brand', 'Product Name', 'Color', 'Quantity']).size().reset_index(name='Count')
 
-    # Cut Tally
-    cut_tally = combined_data.groupby(['Sku', 'Brand', 'Product Name', 'Color', 'Quantity']).size().reset_index(name='Count')
+# Pivot tables
+main_pivot = main_tally.pivot_table(index=['Sku', 'Brand', 'Product Name', 'Color'], columns='Quantity', values='Count', fill_value=0).reset_index()
+bundle_pivot = bundle_tally.pivot_table(index=['Sku', 'Brand', 'Product Name', 'Color'], columns='Quantity', values='Count', fill_value=0).reset_index()
 
-    # Pivot table
-    pivot_table = cut_tally.pivot_table(
-        index=['Sku', 'Brand', 'Product Name', 'Color'],
-        columns='Quantity',
-        values='Count',
-        fill_value=0
-    ).reset_index()
-
-    # Label columns
-    pivot_table.columns.name = None
-    renamed_columns = []
-    for col in pivot_table.columns:
+# Rename columns
+def rename_columns(pivot_df, bundle_mode=False):
+    new_columns = []
+    for col in pivot_df.columns:
         if isinstance(col, (int, float)):
-            yards = 0.5 * int(col)
-            renamed_columns.append(f"{int(col)} QTY ({yards} yd)")
+            if bundle_mode:
+                if int(col) == 1:
+                    yards = 0.25
+                elif int(col) == 2:
+                    yards = 0.5
+                elif int(col) == 4:
+                    yards = 1.0
+                else:
+                    yards = 0.25 * int(col)
+            else:
+                yards = 0.5 * int(col)
+            new_columns.append(f"{int(col)} QTY ({yards} yd)")
         else:
-            renamed_columns.append(col)
-    pivot_table.columns = renamed_columns
+            new_columns.append(col)
+    pivot_df.columns = new_columns
+    return pivot_df
 
-    quantity_cols = [col for col in pivot_table.columns if "QTY" in col]
-    pivot_table = pivot_table[['Brand', 'Sku', 'Product Name', 'Color'] + quantity_cols]
+main_pivot = rename_columns(main_pivot, bundle_mode=False)
+bundle_pivot = rename_columns(bundle_pivot, bundle_mode=True)
 
-    # Total Yardage Calculation
-    def get_total_yards(row):
+# Add total yardage
+def add_total_yardage(df, bundle_mode=False):
+    qty_cols = [col for col in df.columns if "QTY" in col]
+    def get_total(row):
         total = 0
-        for col in quantity_cols:
-            qty_num = int(col.split()[0])
+        for col in qty_cols:
+            qty = int(col.split()[0])
             count = row[col]
-            total += count * (0.5 * qty_num)
+            if bundle_mode:
+                if qty == 1:
+                    yards = 0.25
+                elif qty == 2:
+                    yards = 0.5
+                elif qty == 4:
+                    yards = 1.0
+                else:
+                    yards = 0.25 * qty
+            else:
+                yards = 0.5 * qty
+            total += count * yards
         return total
+    df['Total Yardage'] = df.apply(get_total, axis=1)
+    return df
 
-    pivot_table['Total Yardage'] = pivot_table.apply(get_total_yards, axis=1)
+main_pivot = add_total_yardage(main_pivot, bundle_mode=False)
+bundle_pivot = add_total_yardage(bundle_pivot, bundle_mode=True)
 
-    # Final column order
-    final_columns = ['Brand', 'Sku', 'Product Name', 'Color', 'Total Yardage'] + quantity_cols
-    pivot_table = pivot_table[final_columns]
+# Final column order
+def reorder_columns(df):
+    qty_cols = [col for col in df.columns if "QTY" in col]
+    ordered = ['Brand', 'Sku', 'Product Name', 'Color', 'Total Yardage'] + qty_cols
+    return df[ordered]
 
-    # Add order range column header at far right
-    pivot_table[order_range_col_name] = ""
+main_final = reorder_columns(main_pivot)
+bundle_final = reorder_columns(bundle_pivot)
 
-    # Excel output
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Order Summary"
+# Add order range column header
+main_final[order_range_col_name] = ""
+bundle_final[order_range_col_name] = ""
 
-    for r_idx, row in enumerate(dataframe_to_rows(pivot_table, index=False, header=True), 1):
-        ws.append(row)
-        for c_idx, cell in enumerate(ws[r_idx], 1):
-            if r_idx == 1:
-                cell.font = Font(bold=True)
-                cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-            elif c_idx in [3, 4]:  # Product Name or Color
-                cell.alignment = Alignment(wrap_text=True)
+# Output Excel
+wb = Workbook()
+ws = wb.active
+ws.title = "Fabric + Kits"
 
-    # Adjust widths
-    for column_cells in ws.columns:
-        max_length = max(len(str(cell.value)) if cell.value else 0 for cell in column_cells)
-        adjusted_width = max_length + 2
-        ws.column_dimensions[column_cells[0].column_letter].width = min(adjusted_width, 50)
+for r_idx, row in enumerate(dataframe_to_rows(main_final, index=False, header=True), 1):
+    ws.append(row)
+    for cell in ws[r_idx]:
+        if r_idx == 1:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # Save file
-    excel_data = BytesIO()
-    wb.save(excel_data)
-    excel_data.seek(0)
+# New sheet for Bundles
+ws2 = wb.create_sheet("Bundles")
 
-    # Download UI
-    st.success("✅ File processed and formatted!")
-    st.markdown("---")
-    st.subheader("📥 Download Your Formatted Excel File")
-    st.download_button(
-        label="Download .xlsx File",
-        data=excel_data,
-        file_name="formatted_order_summary.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    )
+for r_idx, row in enumerate(dataframe_to_rows(bundle_final, index=False, header=True), 1):
+    ws2.append(row)
+    for cell in ws2[r_idx]:
+        if r_idx == 1:
+            cell.font = Font(bold=True)
+            cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+# Save
+excel_output = BytesIO()
+wb.save(excel_output)
+excel_output.seek(0)
+excel_output.name = "formatted_order_summary.xlsx"
+
+import ace_tools as tools; tools.download_file(excel_output, "Fabric + Kits + Bundles Summary")
