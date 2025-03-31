@@ -16,6 +16,7 @@ if uploaded_file:
     existing_columns = [col for col in key_columns if col in data.columns]
     data = data[existing_columns]
 
+    # Ensure 'Order #' is numeric
     if 'Order #' in data.columns:
         data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
         original_min_order = int(data['Order #'].min())
@@ -24,19 +25,43 @@ if uploaded_file:
         original_min_order = None
         original_max_order = None
 
+    # Standardize Brand column
     if 'Brand' in data.columns:
         data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
         data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
 
-    if all(col in data.columns for col in ['Customer Name', 'Sku', 'Brand', 'Product Name']):
-        grouped = data.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
-        combined_data = grouped.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
-    else:
-        st.warning("Cannot combine data: Required columns are missing.")
-        st.stop()
+    # Separate Kits from others
+    kits = data[data['Brand'] == 'KIT']
+    non_kits = data[data['Brand'].isin(['FABRIC', 'BUNDLE'])]
 
+    # Group non-kits normally
+    if not non_kits.empty:
+        non_kits_grouped = non_kits.groupby(
+            ['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False
+        )['Quantity'].sum()
+    else:
+        non_kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Quantity'])
+
+    # Group kits using Color to avoid merging different kit types
+    if not kits.empty:
+        kits_grouped = kits.groupby(
+            ['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color'], as_index=False
+        )['Quantity'].sum()
+        # Drop Color after grouping, since we don't need it in the final output
+        kits_grouped = kits_grouped.drop(columns=['Color'])
+    else:
+        kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Quantity'])
+
+    # Combine grouped results
+    combined_data = pd.concat([non_kits_grouped, kits_grouped], ignore_index=True)
+
+    # Sort for consistency
+    combined_data = combined_data.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
+
+    # Create quantity tally
     cut_tally = combined_data.groupby(['Sku', 'Brand', 'Product Name', 'Quantity']).size().reset_index(name='Count')
 
+    # Pivot to wide format
     pivot_table = cut_tally.pivot_table(
         index=['Sku', 'Brand', 'Product Name'],
         columns='Quantity',
@@ -44,15 +69,15 @@ if uploaded_file:
         fill_value=0
     ).reset_index()
 
-    # Rename quantity columns (1 QTY, 2 QTY, etc.)
+    # Rename columns (e.g., "1 QTY", "2 QTY")
     pivot_table.columns.name = None
     pivot_table.columns = [f"{int(col)} QTY" if isinstance(col, (int, float)) else col for col in pivot_table.columns]
 
-    # Reorder columns: Brand, Sku, Product Name, then quantities
+    # Reorder columns: Brand, Sku, Product Name, then QTYs
     quantity_cols = [col for col in pivot_table.columns if "QTY" in col]
     pivot_table = pivot_table[['Brand', 'Sku', 'Product Name'] + quantity_cols]
 
-    # Add original order range as a new row above the headers
+    # Insert original order range row
     if original_min_order is not None and original_max_order is not None:
         header_row = pd.DataFrame(
             [["Original Order Range:", f"{original_min_order} to {original_max_order}"] + [""] * (len(pivot_table.columns) - 2)],
