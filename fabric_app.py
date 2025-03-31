@@ -6,17 +6,16 @@ from io import BytesIO
 st.set_page_config(page_title="Fabric Order Processor", layout="wide")
 st.title("🧵 Fabric Order Processor")
 
-# Allow user to upload a CSV file
+# File uploader
 uploaded_file = st.file_uploader("Upload a CSV File", type="csv")
 
 if uploaded_file:
     data = pd.read_csv(uploaded_file, low_memory=False, encoding='utf-8')
 
     key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
-    existing_columns = [col for col in key_columns if col in data.columns]
-    data = data[existing_columns]
+    data = data[[col for col in key_columns if col in data.columns]]
 
-    # Ensure 'Order #' is numeric
+    # Parse order numbers
     if 'Order #' in data.columns:
         data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
         original_min_order = int(data['Order #'].min())
@@ -25,16 +24,15 @@ if uploaded_file:
         original_min_order = None
         original_max_order = None
 
-    # Standardize Brand column
+    # Filter valid brands
     if 'Brand' in data.columns:
         data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
         data = data[data['Brand'].isin(['FABRIC', 'BUNDLE', 'KIT'])]
 
-    # Separate Kits from others
+    # Split kits from others
     kits = data[data['Brand'] == 'KIT']
     non_kits = data[data['Brand'].isin(['FABRIC', 'BUNDLE'])]
 
-    # Group non-kits normally
     if not non_kits.empty:
         non_kits_grouped = non_kits.groupby(
             ['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False
@@ -42,23 +40,18 @@ if uploaded_file:
     else:
         non_kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Quantity'])
 
-    # Group kits using Color to avoid merging different kit types
     if not kits.empty:
         kits_grouped = kits.groupby(
             ['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color'], as_index=False
-        )['Quantity'].sum()
-        # Drop Color after grouping, since we don't need it in the final output
-        kits_grouped = kits_grouped.drop(columns=['Color'])
+        )['Quantity'].sum().drop(columns=['Color'])
     else:
         kits_grouped = pd.DataFrame(columns=['Customer Name', 'Sku', 'Brand', 'Product Name', 'Quantity'])
 
-    # Combine grouped results
+    # Merge
     combined_data = pd.concat([non_kits_grouped, kits_grouped], ignore_index=True)
-
-    # Sort for consistency
     combined_data = combined_data.sort_values(by=['Sku', 'Quantity'], ascending=[True, False])
 
-    # Create quantity tally
+    # Cut Tally
     cut_tally = combined_data.groupby(['Sku', 'Brand', 'Product Name', 'Quantity']).size().reset_index(name='Count')
 
     # Pivot to wide format
@@ -69,15 +62,37 @@ if uploaded_file:
         fill_value=0
     ).reset_index()
 
-    # Rename columns (e.g., "1 QTY", "2 QTY")
+    # Rename QTY columns (e.g., "2 QTY (1 yd)")
     pivot_table.columns.name = None
-    pivot_table.columns = [f"{int(col)} QTY" if isinstance(col, (int, float)) else col for col in pivot_table.columns]
+    renamed_columns = []
+    for col in pivot_table.columns:
+        if isinstance(col, (int, float)):
+            yards = 0.5 * int(col)
+            renamed_columns.append(f"{int(col)} QTY ({yards} yd)")
+        else:
+            renamed_columns.append(col)
+    pivot_table.columns = renamed_columns
 
-    # Reorder columns: Brand, Sku, Product Name, then QTYs
+    # Reorder columns: Brand, Sku, Product Name, Total Yardage, QTY Columns
     quantity_cols = [col for col in pivot_table.columns if "QTY" in col]
     pivot_table = pivot_table[['Brand', 'Sku', 'Product Name'] + quantity_cols]
 
-    # Insert original order range row
+    # Calculate total yardage
+    def get_total_yards(row):
+        total = 0
+        for col in quantity_cols:
+            qty_num = int(col.split()[0])  # from "2 QTY (1 yd)"
+            count = row[col]
+            total += count * (0.5 * qty_num)
+        return total
+
+    pivot_table['Total Yardage'] = pivot_table.apply(get_total_yards, axis=1)
+
+    # Reorder again to insert 'Total Yardage' after Product Name
+    reordered = ['Brand', 'Sku', 'Product Name', 'Total Yardage'] + quantity_cols
+    pivot_table = pivot_table[reordered]
+
+    # Add header row with order range
     if original_min_order is not None and original_max_order is not None:
         header_row = pd.DataFrame(
             [["Original Order Range:", f"{original_min_order} to {original_max_order}"] + [""] * (len(pivot_table.columns) - 2)],
@@ -87,12 +102,12 @@ if uploaded_file:
     else:
         final_output = pivot_table
 
-    # Convert to downloadable CSV
+    # Convert to CSV for download
     output = BytesIO()
     final_output.to_csv(output, index=False)
 
-    # --- Download Section ---
-    st.success("✅ File processed successfully! Ready to download.")
+    # Download UI
+    st.success("✅ File processed successfully!")
     st.markdown("---")
     st.subheader("📥 Download Your Processed File")
     st.download_button(
