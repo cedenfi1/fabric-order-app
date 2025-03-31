@@ -36,7 +36,6 @@ if uploaded_file:
     fabrics_grouped['Color'] = ""
 
     kits_grouped = kits.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name', 'Color'], as_index=False)['Quantity'].sum()
-
     bundles_grouped = bundles.groupby(['Customer Name', 'Sku', 'Brand', 'Product Name'], as_index=False)['Quantity'].sum()
     bundles_grouped['Color'] = ""
 
@@ -117,28 +116,33 @@ if uploaded_file:
     main_final[order_range_col] = ""
     bundle_final[order_range_col] = ""
 
-    # Build Excel file
+    # Build Excel file — single sheet, merged
     wb = Workbook()
-    ws_main = wb.active
-    ws_main.title = "Fabric + Kits"
+    ws = wb.active
+    ws.title = "Fabric + Kits + Bundles"
 
+    # Write Fabric + Kits
     for r_idx, row in enumerate(dataframe_to_rows(main_final, index=False, header=True), 1):
-        ws_main.append(row)
-        for cell in ws_main[r_idx]:
+        ws.append(row)
+        for cell in ws[r_idx]:
             if r_idx == 1:
                 cell.font = Font(bold=True)
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    ws_bundle = wb.create_sheet("Bundles")
+    # Add 5 empty spacer rows
+    for _ in range(5):
+        ws.append([])
 
-    for r_idx, row in enumerate(dataframe_to_rows(bundle_final, index=False, header=True), 1):
-        ws_bundle.append(row)
-        for cell in ws_bundle[r_idx]:
-            if r_idx == 1:
+    # Write Bundles below
+    start_row = ws.max_row + 1
+    for r_idx, row in enumerate(dataframe_to_rows(bundle_final, index=False, header=True), start_row):
+        ws.append(row)
+        for cell in ws[r_idx]:
+            if r_idx == start_row:
                 cell.font = Font(bold=True)
                 cell.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
-    # Save
+    # Save and export
     output = BytesIO()
     wb.save(output)
     output.seek(0)
