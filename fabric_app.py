@@ -62,10 +62,18 @@ if uploaded_file:
 
     def add_total_quantity(df):
         qty_cols = [col for col in df.columns if "QTY" in col]
-        df['Total Quantity'] = df[qty_cols].sum(axis=1)
+        total_qty = []
+        for _, row in df.iterrows():
+            total = 0
+            for col in qty_cols:
+                qty = int(col.split()[0])
+                count = row[col]
+                total += qty * count
+            total_qty.append(total)
+        df['Total Quantity'] = total_qty
         return df
 
-    # Optional: Yardage calculation logic (commented out for now)
+    # Optional: Yardage logic (still commented out for future use)
     # def add_total_yardage(df, is_bundle=False):
     #     qty_cols = [col for col in df.columns if "QTY" in col]
     #     def compute(row):
