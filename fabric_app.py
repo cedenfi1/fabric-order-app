@@ -69,7 +69,10 @@ if uploaded_file:
             for col in qty_cols:
                 qty = int(col.split()[0])
                 count = row[col]
-                count = int(count) if str(count).isdigit() else 0
+                try:
+                    count = int(count)
+                except:
+                    count = 0
                 total += qty * count
             total_qty.append(total)
         df['Total Quantity'] = total_qty
@@ -79,7 +82,7 @@ if uploaded_file:
         qty_cols = [col for col in df.columns if "QTY" in col]
         return df[['Brand', 'Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
-    # Process: Pivot ➝ Add Totals ➝ Reorder
+    # Pivot, calculate totals, reorder
     main_pivot = pivot_and_format(main_tally, is_bundle=False)
     bundle_pivot = pivot_and_format(bundle_tally, is_bundle=True)
 
@@ -102,7 +105,7 @@ if uploaded_file:
 
     def write_dataframe(ws, df, start_row=1):
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start_row):
-            # Replace only QTY zero values with blank — leave Total Quantity intact
+            # Blank 0s only in QTY columns
             if r_idx == start_row:
                 ws.append(row)
             else:
@@ -138,23 +141,20 @@ if uploaded_file:
             col_letter = get_column_letter(col_idx)
             ws.column_dimensions[col_letter].width = adjusted_width
 
-    # --- Write Main Section ---
+    # Write main section
     write_dataframe(ws, main_final, start_row=1)
     ws.cell(row=2, column=ws.max_column).value = order_range_text
 
-    # Spacer rows
     for _ in range(5):
         ws.append([])
 
-    # --- Write Bundles Section ---
+    # Write bundle section
     bundle_start = ws.max_row + 1
     write_dataframe(ws, bundle_final, start_row=bundle_start)
     ws.cell(row=bundle_start + 1, column=ws.max_column).value = order_range_text
 
-    # Autofit columns
     autofit_column_widths(ws)
 
-    # Output file
     output = BytesIO()
     wb.save(output)
     output.seek(0)
