@@ -69,48 +69,39 @@ if uploaded_file:
 
     main_final = pivot[['Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
-    # Copy template and load workbook
+    # Load template, copy to output
     template_path = "Cut Sheet Template (1).xlsx"
     output_path = "cut_sheet_output.xlsx"
     shutil.copy(template_path, output_path)
     wb = load_workbook(output_path)
     ws = wb.active
 
-    # Insert "Date of Sale" with today's date minus 2 days
+    # Insert "Date of Sale" (H2:I2)
     sale_date = (datetime.now() - timedelta(days=2)).strftime("%m/%d/%Y")
     ws.merge_cells("H2:I2")
     cell = ws["H2"]
     cell.value = f"Date of Sale\n{sale_date}"
     cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Setup headers
-    ws["A4"] = "SKU"
-    ws["B4"] = "FABRIC NAME"
-    ws["C4"] = "IN STORE KITS"
-
-    start_col = 5  # Column E
-    for i, qty_col in enumerate(qty_cols):
-        col_letter = get_column_letter(start_col + i)
-        if "0.5" in qty_col:
-            ws[f"{col_letter}4"] = "1/2 YD CUTS"
-        else:
-            qty_num = qty_col.split()[0]
-            ws[f"{col_letter}4"] = f"{qty_num}YD CUTS"
-
+    # Insert Order Range (L2:M2)
     ws.merge_cells("L2:M2")
-    ws["L2"] = f"Order Range: {order_range_text}"
+    order_cell = ws["L2"]
+    order_cell.value = f"Order Range: {order_range_text}"
+    order_cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
+    # Write data starting from row 3
     for i, row in main_final.iterrows():
-        base_row = 5 + i
+        base_row = 3 + i
         ws.cell(row=base_row, column=1, value=row["Sku"])
         ws.cell(row=base_row, column=2, value=row["Product Name"])
         ws.cell(row=base_row, column=3, value=row["Color"])
+        ws.cell(row=base_row, column=4, value=row["Total Quantity"])
         for j, qty_col in enumerate(qty_cols):
             val = row[qty_col]
             if val != 0:
-                ws.cell(row=base_row, column=start_col + j, value=val)
+                ws.cell(row=base_row, column=5 + j, value=val)
 
-    # Stream final Excel output
+    # Final output
     output = BytesIO()
     wb.save(output)
     output.seek(0)
