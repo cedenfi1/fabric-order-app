@@ -58,12 +58,6 @@ if uploaded_file:
             else:
                 new_cols.append(col)
         pivot.columns = new_cols
-
-        # Replace 0s with blank strings
-        qty_cols = [c for c in pivot.columns if "QTY" in c]
-        for col in qty_cols:
-            pivot[col] = pivot[col].replace(0, "")
-
         return pivot
 
     def add_total_quantity(df):
@@ -80,41 +74,12 @@ if uploaded_file:
         df['Total Quantity'] = total_qty
         return df
 
-    # Optional: Yardage logic (still commented out for future use)
-    # def add_total_yardage(df, is_bundle=False):
-    #     qty_cols = [col for col in df.columns if "QTY" in col]
-    #     def compute(row):
-    #         total = 0
-    #         for col in qty_cols:
-    #             qty = int(col.split()[0])
-    #             count = row[col]
-    #             yards = 0.25 * qty if is_bundle and qty not in [1, 2, 4] else (
-    #                 {1: 0.25, 2: 0.5, 4: 1.0}.get(qty, 0.25 * qty) if is_bundle else 0.5 * qty
-    #             )
-    #             total += count * yards
-    #         return total
-    #     df['Total Yardage'] = df.apply(compute, axis=1)
-    #     return df
-
-    # Pivot first
+    # Pivot, then add total quantity
     main_pivot = pivot_and_format(main_tally, is_bundle=False)
     bundle_pivot = pivot_and_format(bundle_tally, is_bundle=True)
 
-    # Calculate total quantity BEFORE replacing 0s
     main_pivot = add_total_quantity(main_pivot)
     bundle_pivot = add_total_quantity(bundle_pivot)
-
-    # THEN blank out 0s in QTY columns only (leave Total Quantity intact)
-    def remove_zeros_from_qty(df):
-        qty_cols = [col for col in df.columns if "QTY" in col]
-        for col in qty_cols:
-            df[col] = df[col].replace(0, "")
-        return df
-
-    main_pivot = remove_zeros_from_qty(main_pivot)
-    bundle_pivot = remove_zeros_from_qty(bundle_pivot)
-
-
 
     def reorder(df):
         qty_cols = [col for col in df.columns if "QTY" in col]
@@ -135,7 +100,16 @@ if uploaded_file:
 
     def write_dataframe(ws, df, start_row=1):
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start_row):
-            ws.append([("" if (isinstance(cell, (int, float)) and cell == 0) else cell) for cell in row])
+            # Blank out any zero values (except headers and Total Quantity)
+            new_row = []
+            for c_idx, cell in enumerate(row):
+                col_header = df.columns[c_idx] if r_idx == start_row + 1 else ""
+                if isinstance(cell, (int, float)) and cell == 0 and "QTY" in str(col_header):
+                    new_row.append("")
+                else:
+                    new_row.append(cell)
+            ws.append(new_row)
+
             is_header = (r_idx == start_row)
             for c_idx, cell in enumerate(ws[r_idx], 1):
                 if is_header:
