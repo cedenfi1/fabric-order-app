@@ -58,6 +58,12 @@ if uploaded_file:
             else:
                 new_cols.append(col)
         pivot.columns = new_cols
+
+        # Replace 0s with blank strings
+        qty_cols = [c for c in pivot.columns if "QTY" in c]
+        for col in qty_cols:
+            pivot[col] = pivot[col].replace(0, "")
+
         return pivot
 
     def add_total_quantity(df):
@@ -68,6 +74,7 @@ if uploaded_file:
             for col in qty_cols:
                 qty = int(col.split()[0])
                 count = row[col]
+                count = int(count) if str(count).isdigit() else 0
                 total += qty * count
             total_qty.append(total)
         df['Total Quantity'] = total_qty
