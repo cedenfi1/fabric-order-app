@@ -3,7 +3,7 @@ import streamlit as st
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
-from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.utils import get_column_letter
 import shutil
 from datetime import datetime, timedelta
 
@@ -14,18 +14,14 @@ uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
 
 if uploaded_file:
     data = pd.read_csv(uploaded_file, low_memory=False)
-
-    # Extract relevant columns
     key_columns = ['Order #', 'Customer Name', 'Sku', 'Brand', 'Product Name', 'Color', 'Quantity']
     data = data[[col for col in key_columns if col in data.columns]]
 
-    # Order range
     data['Order #'] = pd.to_numeric(data['Order #'], errors='coerce')
     min_order = int(data['Order #'].min())
     max_order = int(data['Order #'].max())
     order_range_text = f"{min_order} to {max_order}"
 
-    # Filter
     data['Brand'] = data['Brand'].astype(str).str.upper().str.strip()
     data = data[data['Brand'].isin(['FABRIC', 'KIT'])]
 
@@ -40,7 +36,6 @@ if uploaded_file:
     main_data = pd.concat([fabrics_grouped, kits_grouped], ignore_index=True)
     main_data = main_data.sort_values(by=['Sku', 'Quantity'])
 
-    # Tally by cut size
     main_tally = main_data.groupby(['Sku', 'Brand', 'Product Name', 'Color', 'Quantity']).size().reset_index(name='Count')
 
     pivot = main_tally.pivot_table(index=['Sku', 'Brand', 'Product Name', 'Color'],
@@ -48,7 +43,6 @@ if uploaded_file:
                                    values='Count',
                                    fill_value=0).reset_index()
 
-    # Rename columns
     new_cols = []
     for col in pivot.columns:
         if isinstance(col, (int, float)):
@@ -59,7 +53,6 @@ if uploaded_file:
             new_cols.append(col)
     pivot.columns = new_cols
 
-    # Total Quantity
     qty_cols = [col for col in pivot.columns if "QTY" in col]
     total_qty = []
     for _, row in pivot.iterrows():
@@ -74,34 +67,50 @@ if uploaded_file:
         total_qty.append(total)
     pivot['Total Quantity'] = total_qty
 
-    # Final column order
     main_final = pivot[['Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
-    # Copy template and prepare workbook
+    # Copy template and load workbook
     template_path = "Cut Sheet Template (1).xlsx"
     output_path = "cut_sheet_output.xlsx"
     shutil.copy(template_path, output_path)
     wb = load_workbook(output_path)
     ws = wb.active
 
-    # Insert Date of Sale
+    # Insert "Date of Sale" with today's date minus 2 days
     sale_date = (datetime.now() - timedelta(days=2)).strftime("%m/%d/%Y")
     ws.merge_cells("H2:I2")
     cell = ws["H2"]
     cell.value = f"Date of Sale\n{sale_date}"
     cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Insert Order Range
+    # Setup headers
+    ws["A4"] = "SKU"
+    ws["B4"] = "FABRIC NAME"
+    ws["C4"] = "IN STORE KITS"
+
+    start_col = 5  # Column E
+    for i, qty_col in enumerate(qty_cols):
+        col_letter = get_column_letter(start_col + i)
+        if "0.5" in qty_col:
+            ws[f"{col_letter}4"] = "1/2 YD CUTS"
+        else:
+            qty_num = qty_col.split()[0]
+            ws[f"{col_letter}4"] = f"{qty_num}YD CUTS"
+
     ws.merge_cells("L2:M2")
-    order_cell = ws["L2"]
-    order_cell.value = f"Order Range: {order_range_text}"
-    order_cell.alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
+    ws["L2"] = f"Order Range: {order_range_text}"
 
-    # Write data to row 4 (headers will show up in row 3 automatically)
-    for r_idx, row in enumerate(dataframe_to_rows(main_final, index=False, header=True), start=3):
-        ws.append(row)
+    for i, row in main_final.iterrows():
+        base_row = 5 + i
+        ws.cell(row=base_row, column=1, value=row["Sku"])
+        ws.cell(row=base_row, column=2, value=row["Product Name"])
+        ws.cell(row=base_row, column=3, value=row["Color"])
+        for j, qty_col in enumerate(qty_cols):
+            val = row[qty_col]
+            if val != 0:
+                ws.cell(row=base_row, column=start_col + j, value=val)
 
-    # Export final output
+    # Stream final Excel output
     output = BytesIO()
     wb.save(output)
     output.seek(0)
