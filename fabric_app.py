@@ -123,6 +123,18 @@ if uploaded_file:
                 else:
                     if (r_idx - start_row) % 2 == 1:
                         cell.fill = alt_row_fill
+                # Auto-adjust column widths
+            for col in ws.columns:
+                max_length = 0
+                col_letter = col[0].column_letter
+                for cell in col:
+                    try:
+                        if cell.value:
+                            max_length = max(max_length, len(str(cell.value)))
+                        except:
+                        pass
+                adjusted_width = (max_length + 2)
+                ws.column_dimensions[col_letter].width = adjusted_width
 
     # Write both sections to Excel
     write_dataframe(ws, main_final, start_row=1)
