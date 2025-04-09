@@ -5,7 +5,6 @@ from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Alignment, PatternFill
 
-# Page setup
 st.set_page_config(page_title="Fabric Order Processor", layout="wide")
 st.title("🧵 Fabric Order Processor")
 
@@ -59,11 +58,6 @@ if uploaded_file:
             else:
                 new_cols.append(col)
         pivot.columns = new_cols
-
-        # Replace 0s with blank strings
-        qty_cols = [c for c in pivot.columns if "QTY" in c]
-        for col in qty_cols:
-            pivot[col] = pivot[col].replace(0, "")
         return pivot
 
     def add_total_quantity(df):
@@ -74,11 +68,26 @@ if uploaded_file:
             for col in qty_cols:
                 qty = int(col.split()[0])
                 count = row[col]
-                count = int(count) if str(count).isdigit() else 0
                 total += qty * count
             total_qty.append(total)
         df['Total Quantity'] = total_qty
         return df
+
+    # Optional: Yardage logic (still commented out for future use)
+    # def add_total_yardage(df, is_bundle=False):
+    #     qty_cols = [col for col in df.columns if "QTY" in col]
+    #     def compute(row):
+    #         total = 0
+    #         for col in qty_cols:
+    #             qty = int(col.split()[0])
+    #             count = row[col]
+    #             yards = 0.25 * qty if is_bundle and qty not in [1, 2, 4] else (
+    #                 {1: 0.25, 2: 0.5, 4: 1.0}.get(qty, 0.25 * qty) if is_bundle else 0.5 * qty
+    #             )
+    #             total += count * yards
+    #         return total
+    #     df['Total Yardage'] = df.apply(compute, axis=1)
+    #     return df
 
     main_pivot = pivot_and_format(main_tally, is_bundle=False)
     bundle_pivot = pivot_and_format(bundle_tally, is_bundle=True)
