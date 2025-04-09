@@ -1,20 +1,12 @@
 import pandas as pd
 import streamlit as st
 from io import BytesIO
-from PIL import Image
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Alignment, PatternFill
 
 # Page setup
 st.set_page_config(page_title="Fabric Order Processor", layout="wide")
-
-# --- Load and Show Logo ---
-logo_path = "Sew Mads Logo_Digital_Horizontal_Colored.png"
-logo = Image.open(logo_path)
-st.image(logo, use_column_width=False, width=300)
-
-# Title under logo
 st.title("🧵 Fabric Order Processor")
 
 uploaded_file = st.file_uploader("Upload your CSV file", type="csv")
@@ -68,7 +60,7 @@ if uploaded_file:
                 new_cols.append(col)
         pivot.columns = new_cols
 
-        # Replace 0s with blanks in quantity columns
+        # Replace 0s with blank strings
         qty_cols = [c for c in pivot.columns if "QTY" in c]
         for col in qty_cols:
             pivot[col] = pivot[col].replace(0, "")
