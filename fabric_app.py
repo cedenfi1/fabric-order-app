@@ -4,6 +4,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
 from openpyxl.styles import Font, Alignment, PatternFill
+from openpyxl.utils import get_column_letter
 
 st.set_page_config(page_title="Fabric Order Processor", layout="wide")
 st.title("🧵 Fabric Order Processor")
@@ -91,7 +92,7 @@ if uploaded_file:
     main_final["Order Range"] = ""
     bundle_final["Order Range"] = ""
 
-    # --- Excel Output ---
+    # --- Excel Setup ---
     wb = Workbook()
     ws = wb.active
     ws.title = "Fabric + Kits + Bundles"
@@ -101,7 +102,7 @@ if uploaded_file:
 
     def write_dataframe(ws, df, start_row=1):
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start_row):
-            # Replace only QTY zeros with blanks for output
+            # Replace only QTY zero values with blank — leave Total Quantity intact
             if r_idx == start_row:
                 ws.append(row)
             else:
@@ -123,35 +124,41 @@ if uploaded_file:
                 else:
                     if (r_idx - start_row) % 2 == 1:
                         cell.fill = alt_row_fill
-                # Auto-adjust column widths
-            for col in ws.columns:
-                max_length = 0
-                col_letter = col[0].column_letter
-                for cell in col:
-                    try:
-                        if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
-                        except:
-                        pass
-                adjusted_width = (max_length + 2)
-                ws.column_dimensions[col_letter].width = adjusted_width
 
-    # Write both sections to Excel
+    def autofit_column_widths(ws):
+        for col_idx, col_cells in enumerate(ws.columns, 1):
+            max_length = 0
+            for cell in col_cells:
+                try:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                except:
+                    pass
+            adjusted_width = max_length + 2
+            col_letter = get_column_letter(col_idx)
+            ws.column_dimensions[col_letter].width = adjusted_width
+
+    # --- Write Main Section ---
     write_dataframe(ws, main_final, start_row=1)
     ws.cell(row=2, column=ws.max_column).value = order_range_text
 
+    # Spacer rows
     for _ in range(5):
         ws.append([])
 
+    # --- Write Bundles Section ---
     bundle_start = ws.max_row + 1
     write_dataframe(ws, bundle_final, start_row=bundle_start)
     ws.cell(row=bundle_start + 1, column=ws.max_column).value = order_range_text
 
+    # Autofit columns
+    autofit_column_widths(ws)
+
+    # Output file
     output = BytesIO()
     wb.save(output)
     output.seek(0)
 
-    # --- Streamlit Output ---
     st.success("✅ File processed successfully!")
     st.download_button(
         label="📥 Download Formatted Excel File",
