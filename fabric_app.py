@@ -74,16 +74,16 @@ if uploaded_file:
         df['Total Quantity'] = total_qty
         return df
 
-    # Pivot, then add total quantity
+    def reorder(df):
+        qty_cols = [col for col in df.columns if "QTY" in col]
+        return df[['Brand', 'Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
+
+    # Process: Pivot ➝ Add Totals ➝ Reorder
     main_pivot = pivot_and_format(main_tally, is_bundle=False)
     bundle_pivot = pivot_and_format(bundle_tally, is_bundle=True)
 
     main_pivot = add_total_quantity(main_pivot)
     bundle_pivot = add_total_quantity(bundle_pivot)
-
-    def reorder(df):
-        qty_cols = [col for col in df.columns if "QTY" in col]
-        return df[['Brand', 'Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
     main_final = reorder(main_pivot)
     bundle_final = reorder(bundle_pivot)
@@ -91,6 +91,7 @@ if uploaded_file:
     main_final["Order Range"] = ""
     bundle_final["Order Range"] = ""
 
+    # --- Excel Output ---
     wb = Workbook()
     ws = wb.active
     ws.title = "Fabric + Kits + Bundles"
@@ -100,15 +101,18 @@ if uploaded_file:
 
     def write_dataframe(ws, df, start_row=1):
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start_row):
-            # Blank out any zero values (except headers and Total Quantity)
-            new_row = []
-            for c_idx, cell in enumerate(row):
-                col_header = df.columns[c_idx] if r_idx == start_row + 1 else ""
-                if isinstance(cell, (int, float)) and cell == 0 and "QTY" in str(col_header):
-                    new_row.append("")
-                else:
-                    new_row.append(cell)
-            ws.append(new_row)
+            # Replace only QTY zeros with blanks for output
+            if r_idx == start_row:
+                ws.append(row)
+            else:
+                cleaned_row = []
+                for i, cell in enumerate(row):
+                    col_name = df.columns[i]
+                    if isinstance(cell, (int, float)) and cell == 0 and "QTY" in col_name:
+                        cleaned_row.append("")
+                    else:
+                        cleaned_row.append(cell)
+                ws.append(cleaned_row)
 
             is_header = (r_idx == start_row)
             for c_idx, cell in enumerate(ws[r_idx], 1):
@@ -120,6 +124,7 @@ if uploaded_file:
                     if (r_idx - start_row) % 2 == 1:
                         cell.fill = alt_row_fill
 
+    # Write both sections to Excel
     write_dataframe(ws, main_final, start_row=1)
     ws.cell(row=2, column=ws.max_column).value = order_range_text
 
@@ -134,6 +139,7 @@ if uploaded_file:
     wb.save(output)
     output.seek(0)
 
+    # --- Streamlit Output ---
     st.success("✅ File processed successfully!")
     st.download_button(
         label="📥 Download Formatted Excel File",
