@@ -96,11 +96,15 @@ if uploaded_file:
     #     df['Total Yardage'] = df.apply(compute, axis=1)
     #     return df
 
-     # Pivot first
+    # Pivot first
     main_pivot = pivot_and_format(main_tally, is_bundle=False)
     bundle_pivot = pivot_and_format(bundle_tally, is_bundle=True)
 
-    # THEN fix zero blanking before adding totals
+    # Calculate total quantity BEFORE replacing 0s
+    main_pivot = add_total_quantity(main_pivot)
+    bundle_pivot = add_total_quantity(bundle_pivot)
+
+    # THEN blank out 0s in QTY columns only (leave Total Quantity intact)
     def remove_zeros_from_qty(df):
         qty_cols = [col for col in df.columns if "QTY" in col]
         for col in qty_cols:
@@ -110,9 +114,6 @@ if uploaded_file:
     main_pivot = remove_zeros_from_qty(main_pivot)
     bundle_pivot = remove_zeros_from_qty(bundle_pivot)
 
-    # THEN calculate total quantity
-    main_pivot = add_total_quantity(main_pivot)
-    bundle_pivot = add_total_quantity(bundle_pivot)
 
 
     def reorder(df):
