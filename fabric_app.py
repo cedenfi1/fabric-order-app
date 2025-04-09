@@ -135,7 +135,7 @@ if uploaded_file:
 
     def write_dataframe(ws, df, start_row=1):
         for r_idx, row in enumerate(dataframe_to_rows(df, index=False, header=True), start_row):
-            ws.append(row)
+            ws.append([("" if (isinstance(cell, (int, float)) and cell == 0) else cell) for cell in row])
             is_header = (r_idx == start_row)
             for c_idx, cell in enumerate(ws[r_idx], 1):
                 if is_header:
