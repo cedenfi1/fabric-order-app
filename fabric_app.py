@@ -53,12 +53,12 @@ if uploaded_file:
     pivot.columns = new_cols
 
     qty_cols = [col for col in pivot.columns if "QTY" in col]
-    pivot['Total Quantity'] = [
+    total_quantity = [
         sum(int(col.split()[0]) * row[col] for col in qty_cols)
         for _, row in pivot.iterrows()
     ]
 
-    final_df = pivot[['Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
+    final_df = pivot[['Sku', 'Product Name', 'Color'] + qty_cols]
 
     template_path = "Cut Sheet Template (1).xlsx"
     output_path = "cut_sheet_output.xlsx"
@@ -77,6 +77,7 @@ if uploaded_file:
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
+    # Ensure no data is written to row 3
     start_row = 4
     start_col = 1
 
@@ -86,6 +87,7 @@ if uploaded_file:
             if isinstance(value, (int, float)) and value == 0 and "QTY" in final_df.columns[j - 1]:
                 continue
             ws.cell(row=row_index, column=j, value=value)
+        ws.cell(row=row_index, column=start_col + len(final_df.columns), value=total_quantity[i])
 
     output = BytesIO()
     wb.save(output)
