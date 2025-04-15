@@ -70,6 +70,9 @@ if uploaded_file:
     wb = load_workbook(output_path)
     ws = wb.active
 
+    # Remove top row (if needed)
+    ws.delete_rows(1)
+
     # Date of Sale
     sale_date = (datetime.now() - timedelta(days=2)).strftime("%m/%d/%Y")
     ws.merge_cells("H2:I2")
@@ -81,16 +84,10 @@ if uploaded_file:
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Header starts at row 3, data starts at row 4
-    header_row = 3
-    start_row = 4
+    # Data starts at row 3 (headers already present in the template)
+    start_row = 3
     start_col = 1
 
-    # Write headers
-    for col_idx, col_name in enumerate(final_df.columns, start=start_col):
-        ws.cell(row=header_row, column=col_idx, value=col_name)
-
-    # Write data
     for i, row in final_df.iterrows():
         row_index = start_row + i
         for j, value in enumerate(row, start=start_col):
