@@ -3,7 +3,6 @@ import streamlit as st
 from io import BytesIO
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment
-from openpyxl.utils import get_column_letter
 import shutil
 from datetime import datetime, timedelta
 
@@ -43,7 +42,6 @@ if uploaded_file:
                                    values='Count',
                                    fill_value=0).reset_index()
 
-    # Rename columns
     new_cols = []
     for col in pivot.columns:
         if isinstance(col, (int, float)):
@@ -54,7 +52,6 @@ if uploaded_file:
             new_cols.append(col)
     pivot.columns = new_cols
 
-    # Total Quantity
     qty_cols = [col for col in pivot.columns if "QTY" in col]
     pivot['Total Quantity'] = [
         sum(int(col.split()[0]) * row[col] for col in qty_cols)
@@ -63,40 +60,33 @@ if uploaded_file:
 
     final_df = pivot[['Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
-    # Load Template
     template_path = "Cut Sheet Template (1).xlsx"
     output_path = "cut_sheet_output.xlsx"
     shutil.copy(template_path, output_path)
     wb = load_workbook(output_path)
     ws = wb.active
 
-    # Remove top row (if needed)
     ws.delete_rows(1)
 
-    # Date of Sale
     sale_date = (datetime.now() - timedelta(days=2)).strftime("%m/%d/%Y")
     ws.merge_cells("H2:I2")
     ws["H2"].value = f"Date of Sale\n{sale_date}"
     ws["H2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Order Range
     ws.merge_cells("L2:M2")
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Data starts at row 4 (headers already present in the template)
     start_row = 4
-
     start_col = 1
 
     for i, row in final_df.iterrows():
         row_index = start_row + i
         for j, value in enumerate(row, start=start_col):
             if isinstance(value, (int, float)) and value == 0 and "QTY" in final_df.columns[j - 1]:
-                continue  # Skip zeroes for QTY columns
+                continue
             ws.cell(row=row_index, column=j, value=value)
 
-    # Export
     output = BytesIO()
     wb.save(output)
     output.seek(0)
