@@ -85,7 +85,7 @@ if uploaded_file:
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
     # Data starts at row 3 (headers already present in the template)
-    start_row = 3
+    start_row = 4
     start_col = 1
 
     for i, row in final_df.iterrows():
