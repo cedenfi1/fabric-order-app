@@ -43,7 +43,6 @@ if uploaded_file:
                                    values='Count',
                                    fill_value=0).reset_index()
 
-    # Rename columns
     new_cols = []
     for col in pivot.columns:
         if isinstance(col, (int, float)):
@@ -54,7 +53,6 @@ if uploaded_file:
             new_cols.append(col)
     pivot.columns = new_cols
 
-    # Total Quantity
     qty_cols = [col for col in pivot.columns if "QTY" in col]
     pivot['Total Quantity'] = [
         sum(int(col.split()[0]) * row[col] for col in qty_cols)
@@ -63,42 +61,38 @@ if uploaded_file:
 
     final_df = pivot[['Sku', 'Product Name', 'Color', 'Total Quantity'] + qty_cols]
 
-    # Load Template
+    # Load and copy template
     template_path = "Cut Sheet Template (1).xlsx"
     output_path = "cut_sheet_output.xlsx"
     shutil.copy(template_path, output_path)
     wb = load_workbook(output_path)
     ws = wb.active
 
-    # Date of Sale
+    # Step 1: Remove the first row
+    ws.delete_rows(1)
+
+    # Step 2: Add Date of Sale and Order Range
     sale_date = (datetime.now() - timedelta(days=2)).strftime("%m/%d/%Y")
     ws.merge_cells("H2:I2")
     ws["H2"].value = f"Date of Sale\n{sale_date}"
     ws["H2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Order Range
     ws.merge_cells("L2:M2")
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Header starts at row 3, data starts at row 4
-    header_row = 3
-    start_row = 4
+    # Step 3: Write data starting on row 3 (headers are now on row 2)
+    start_row = 3
     start_col = 1
 
-    # Write headers
-    for col_idx, col_name in enumerate(final_df.columns, start=start_col):
-        ws.cell(row=header_row, column=col_idx, value=col_name)
-
-    # Write data
     for i, row in final_df.iterrows():
         row_index = start_row + i
         for j, value in enumerate(row, start=start_col):
             if isinstance(value, (int, float)) and value == 0 and "QTY" in final_df.columns[j - 1]:
-                continue  # Skip zeroes for QTY columns
+                continue  # skip zeroes for QTY columns
             ws.cell(row=row_index, column=j, value=value)
 
-    # Export
+    # Step 4: Finalize and send file
     output = BytesIO()
     wb.save(output)
     output.seek(0)
