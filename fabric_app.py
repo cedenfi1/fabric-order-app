@@ -77,7 +77,6 @@ if uploaded_file:
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Ensure no data is written to row 3
     start_row = 4
     start_col = 1
 
@@ -86,7 +85,10 @@ if uploaded_file:
         for j, value in enumerate(row, start=start_col):
             if isinstance(value, (int, float)) and value == 0 and "QTY" in final_df.columns[j - 1]:
                 continue
-            ws.cell(row=row_index, column=j, value=value)
+            cell = ws.cell(row=row_index, column=j)
+            cell.value = value
+            cell.alignment = Alignment(horizontal="left", vertical="center")
+        # Write Total Quantity in the last available column
         ws.cell(row=row_index, column=start_col + len(final_df.columns), value=total_quantity[i])
 
     output = BytesIO()
