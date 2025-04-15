@@ -84,16 +84,8 @@ if uploaded_file:
     ws["L2"].value = f"Order Range: {order_range_text}"
     ws["L2"].alignment = Alignment(wrap_text=True, horizontal="center", vertical="center")
 
-    # Data starts at row 3 (headers already present in the template)
+    # Data starts at row 4 (headers already present in the template)
     start_row = 4
-    start_col = 1
-
-    for i, row in final_df.iterrows():
-        row_index = start_row + i
-        for j, value in enumerate(row, start=start_col):
-            if isinstance(value, (int, float)) and value == 0 and "QTY" in final_df.columns[j - 1]:
-                continue  # Skip zeroes for QTY columns
-            ws.cell(row=row_index, column=j, value=value)
 
     # Export
     output = BytesIO()
