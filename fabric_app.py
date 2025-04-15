@@ -87,7 +87,7 @@ if uploaded_file:
     # Data starts at row 4 (headers already present in the template)
     start_row = 4
 
-     start_col = 1
+    start_col = 1
 
     for i, row in final_df.iterrows():
         row_index = start_row + i
